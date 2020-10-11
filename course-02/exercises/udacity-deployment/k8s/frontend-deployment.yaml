@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    service: frontend
+  name: frontend
+spec:
+  selector:
+    matchLabels:
+      service: frontend
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        service: frontend
+        api: external        
+    spec:
+      containers:
+      - image: mmoustafa/udacity-frontend:latest
+        name: frontend
+        imagePullPolicy: Always          
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "32Mi"
+            cpu: "20m"                 
+      restartPolicy: Always
