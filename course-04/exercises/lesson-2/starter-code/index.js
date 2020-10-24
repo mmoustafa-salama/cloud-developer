@@ -1,37 +1,46 @@
 'use strict'
 
-const AWS = require('aws-sdk')
+const AWS = require('aws-sdk');
 
-const docClient = new AWS.DynamoDB.DocumentClient()
+const docClient = new AWS.DynamoDB.DocumentClient();
 
-const groupsTable = process.env.GROUPS_TABLE
+const groupsTable = process.env.GROUPS_TABLE;
 
 exports.handler = async (event) => {
-  console.log('Processing event: ', event)
+  console.log('Processing event: ', event);
 
-  // TODO: Read and parse "limit" and "nextKey" parameters from query parameters
-  // let nextKey // Next key to continue scan operation if necessary
-  // let limit // Maximum number of elements to return
+  // Read and parse "limit" and "nextKey" parameters from query parameters
+  let nextKey; // Next key to continue scan operation if necessary
+  let limit; // Maximum number of elements to return
 
-  // HINT: You might find the following method useful to get an incoming parameter value
-  // getQueryParameter(event, 'param')
+  try {
+    nextKey = parseNextKeyParameter(event);
+    limit = parseLimitParameter(event) || 20;
+  } catch (e) {
+    console.log('Failed to parse parameters: ' + e.message);
 
-  // TODO: Return 400 error if parameters are invalid
-
+    // Return 400 error if parameters are invalid
+    return {
+      statusCode: 400,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify('Invalid query parameters')
+    };
+  }
   // Scan operation parameters
   const scanParams = {
     TableName: groupsTable,
-    // TODO: Set correct pagination parameters
-    // Limit: ???,
-    // ExclusiveStartKey: ???
-  }
-  console.log('Scan params: ', scanParams)
+    // Set correct pagination parameters
+    Limit: limit,
+    ExclusiveStartKey: nextKey
+  };
 
-  const result = await docClient.scan(scanParams).promise()
+  console.log('Scan params: ', scanParams);
 
-  const items = result.Items
+  const result = await docClient.scan(scanParams).promise();
 
-  console.log('Result: ', result)
+  const items = result.Items;
+
+  console.log('Result: ', result);
 
   // Return result
   return {
@@ -44,7 +53,31 @@ exports.handler = async (event) => {
       // Encode the JSON object so a client can return it in a URL as is
       nextKey: encodeNextKey(result.LastEvaluatedKey)
     })
+  };
+};
+
+function parseNextKeyParameter(event) {
+  const nextKeyStr = getQueryParameter(event, 'nextKey');
+  if (!nextKeyStr) {
+    return undefined;
   }
+
+  const urlDecoded = decodeURIComponent(nextKeyStr);
+  return JSON.parse(urlDecoded);
+}
+
+function parseLimitParameter(event) {
+  const limitStr = getQueryParameter(event, 'limit');
+  if (!limitStr) {
+    return undefined;
+  }
+
+  const limit = parseInt(limitStr);
+  if (limit <= 0) {
+    throw new Error('Limit should be an integer greater than 0.');
+  }
+
+  return limit;
 }
 
 /**
@@ -56,12 +89,12 @@ exports.handler = async (event) => {
  * @returns {string} a value of a query parameter value or "undefined" if a parameter is not defined
  */
 function getQueryParameter(event, name) {
-  const queryParams = event.queryStringParameters
+  const queryParams = event.queryStringParameters;
   if (!queryParams) {
-    return undefined
+    return undefined;
   }
 
-  return queryParams[name]
+  return queryParams[name];
 }
 
 /**
@@ -73,8 +106,8 @@ function getQueryParameter(event, name) {
  */
 function encodeNextKey(lastEvaluatedKey) {
   if (!lastEvaluatedKey) {
-    return null
+    return null;
   }
 
-  return encodeURIComponent(JSON.stringify(lastEvaluatedKey))
+  return encodeURIComponent(JSON.stringify(lastEvaluatedKey));
 }
