@@ -3,23 +3,16 @@ import 'source-map-support/register'
 
 import { verify, decode } from 'jsonwebtoken'
 import { createLogger } from '../../utils/logger'
-// import Axios from 'axios'
 import { Jwt } from '../../auth/Jwt'
 import { JwtPayload } from '../../auth/JwtPayload'
-import * as AWS from 'aws-sdk'
+import { getSigningKey } from '../../auth/utils'
 
 const logger = createLogger('auth')
 
-// TODO: Provide a URL that can be used to download a certificate that can be used
-// to verify JWT token signature.
-// To get this URL you need to go to an Auth0 page -> Show Advanced Settings -> Endpoints -> JSON Web Key Set
-// const jwksUrl = 'https://cloud-dev.eu.auth0.com/.well-known/jwks.json'
+// URL that can be used to download a certificate that can be used to verify JWT token signature.
+const jwksUrl = 'https://cloud-dev.eu.auth0.com/.well-known/jwks.json'
 
-const secretId = process.env.AUTH_0_SECRET_ID
-const secretField = process.env.AUTH_0_SECRET_FIELD
-const secretClient = new AWS.SecretsManager();
-
-let cachedSecret;
+let cachedPublicKey;
 
 export const handler = async (event: CustomAuthorizerEvent): Promise<CustomAuthorizerResult> => {
   logger.info('Authorizing a user', event.authorizationToken)
@@ -63,16 +56,9 @@ async function verifyToken(authHeader: string): Promise<JwtPayload> {
   const token = getToken(authHeader)
   const jwt: Jwt = decode(token, { complete: true }) as Jwt
 
-  if (!jwt) {
-  }
-
-  // TODO: Implement token verification
-  // You should implement it similarly to how it was implemented for the exercise for the lesson 5
-  // You can read more about how to do this here: https://auth0.com/blog/navigating-rs256-and-jwks/
-
-  const secretObject = await getSecret();
-  const auth0Secret = secretObject[secretField];
-  return verify(token, auth0Secret) as JwtPayload;
+  // Implement token verification using public signing key
+  const publicKey = await getPublicKey(jwt.header.kid);
+  return verify(token, publicKey, { algorithms: ['RS256'] }) as JwtPayload;
 }
 
 function getToken(authHeader: string): string {
@@ -87,14 +73,12 @@ function getToken(authHeader: string): string {
   return token
 }
 
-async function getSecret() {
-  if (cachedSecret) return cachedSecret;
+async function getPublicKey(kid) {
+  if (cachedPublicKey) { return cachedPublicKey; }
 
-  const data = await secretClient.getSecretValue({
-    SecretId: secretId
-  }).promise()
+  const signingkey = await getSigningKey(kid, jwksUrl);
 
-  cachedSecret = JSON.parse(data.SecretString);
+  cachedPublicKey = signingkey.publicKey;
 
-  return cachedSecret;
+  return cachedPublicKey;
 }
